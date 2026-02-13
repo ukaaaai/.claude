@@ -41,11 +41,6 @@
 - `path/to/reference.ts` - [何を参考にするか]
 - `path/to/pattern.ts` - [パターンの参照元]
 
-### コミット
-
-- `feat: [コミットメッセージ]`
-- `fix: [必要に応じて追加]`
-
 ## 検証手順
 
 ```bash
