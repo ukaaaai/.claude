@@ -7,11 +7,11 @@
 ## ナレッジマネージャー(Librarian)
 
 資料館には**ナレッジマネージャー(Librarian)**が常駐し、資料の検索・インデックス管理を担当。
-**コアチームに属さない独立した存在**であり、全てのagentにサービスを提供する。
+**コアチームに属さない独立した存在**であり、全てのロールにサービスを提供する。
 
-呼び出し: `Task(subagent_type: "librarian", prompt: "JWTに関する過去の調査はありますか？")`
+呼び出し: `Task(subagent_type="general-purpose", model="haiku", prompt="$(cat roles/librarian.md)\n\nJWTに関する過去の調査はありますか？")`
 
-詳細: ~/.claude/agents/librarian.md
+詳細: roles/librarian.md
 
 ## ディレクトリ構造
 

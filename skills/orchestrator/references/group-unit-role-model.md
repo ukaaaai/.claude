@@ -45,9 +45,22 @@ hierarchy:
 
 | ロール | 役割 | 参照 |
 |--------|------|------|
-| 調査担当(Researcher) | 技術調査、コードベース分析 | researcher.md |
-| 設計担当(Architect) | アーキテクチャ設計、技術選定 | architect.md |
-| 実装担当(Engineer) | コード実装、リファクタリング | engineer.md |
-| QA担当(QA Reviewer) | テスト、レビュー、品質チェック | qa-reviewer.md |
-| 文書担当(Tech Writer) | ドキュメント作成 | tech-writer.md |
-| 運用担当(DevOps) | デプロイ、環境構築 | devops.md |
+| 調査担当(Researcher) | 技術調査、コードベース分析 | roles/researcher.md |
+| 設計担当(Architect) | アーキテクチャ設計、技術選定 | roles/architect.md |
+| 実装担当(Engineer) | コード実装、リファクタリング | roles/engineer.md |
+| QA担当(QA Reviewer) | テスト、レビュー、品質チェック | roles/qa-reviewer.md |
+| 文書担当(Tech Writer) | ドキュメント作成 | roles/tech-writer.md |
+| 運用担当(DevOps) | デプロイ、環境構築 | roles/devops.md |
+
+## チームによる動的グループ実現
+
+動的グループはAgent Teams（TeamCreate/TeamDelete）で実現する。
+
+| フェーズ | チーム名 | メンバー | 方式 |
+|---------|---------|---------|------|
+| 調査・設計 | `orch-{id}-investigate` | researcher, architect | TeamCreate |
+| 実装・QA | `orch-{id}-implement` | engineer, qa-reviewer (+tech-writer, devops) | TeamCreate |
+
+チーム内のロールはSendMessageでpeer通信し、TaskCreate/TaskUpdateでタスクを管理する。
+チーム破棄前に必ずハンドオフ（decisions, arc.saved, 未解決事項の収集）を実施する。
+
