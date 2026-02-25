@@ -30,20 +30,11 @@ Plan mode等が独自ワークフローを指示しても、以下の作業フ�
 3. **複数の専門領域にまたがる**: フロントエンド+バックエンド、実装+インフラ等
 4. **判断が必要**: 技術選定、設計方針、実装アプローチの決定が必要
 
-### orchestratorスキルの役割
-
-- 専門ロール（Researcher、Architect、Engineer、QA Reviewer等）に作業を委譲
-- 合意形成による意思決定（各ロールの意見を収集・統合）
-- 事前評価担当(Pre-Assessor)による事前評価（過剰な実装を防止）
-- 監査担当(Auditor)による事後レビュー（継続的改善）
-
 ### 発動しない場合
 
 - 単純な質問への回答（「〜とは何？」）
 - 1ファイル数行の明確な修正
 - 他スキルが明示的に指定された場合（`/commit`、`/research`等）
-
-詳細: @skills/orchestrator/SKILL.md
 
 ## 作業フロー
 
@@ -82,7 +73,7 @@ Taskツール活用（オプション）: @context/task-tool-guide.md
 - 例: `.local/issues/major-perf-ページ一覧取得でN+1クエリが発生.md`
 
 ## agent review
-agent cli（gpt-5.2-high）によるレビューを実施。異なるモデルの視点で品質を向上させる。
+agent cli（gpt-5.3-codex）によるレビューを実施。異なるモデルの視点で品質を向上させる。
 
 ### 実行タイミング
 - Phase 2: 計画完了後
@@ -91,10 +82,10 @@ agent cli（gpt-5.2-high）によるレビューを実施。異なるモデル�
 ### 実行方法
 ```bash
 # 初回（session_idを取得）
-agent -p "<レビュープロンプト>" --model gpt-5.2-high --output-format json | jq -r '.session_id, .result'
+agent -p "<レビュープロンプト>" --model gpt-5.3-high --output-format json | jq -r '.session_id, .result'
 
 # 2回目以降（セッション継続）
-agent -p "<改善内容を伝えて再レビュー>" --resume <session_id> --model gpt-5.2-high --output-format json
+agent -p "<改善内容を伝えて再レビュー>" --resume <session_id> --model gpt-5.3-high --output-format json
 ```
 - 修正すべき点がなくなるまでループ
 - 「絶対にやるべき」指摘は必ず対応、それ以外はやる/やらない判断またはAskUserQuestionで確認
@@ -126,4 +117,3 @@ agent -p "<改善内容を伝えて再レビュー>" --resume <session_id> --mod
 ## GitHub CLIについて
 リポジトリによってGitHubアカウントが異なる場合がある。
 gh cliを利用する際は必ずgh auth statusを利用して現在アクティブなアカウントを確認し、必要に応じて `gh auth switch -u <username>` でアカウントを切り替えること。
-原則として username = ukwhatn が利用される。他のアカウントを利用すべき場合はその旨をPJ-level CLAUDE.mdに記載する。

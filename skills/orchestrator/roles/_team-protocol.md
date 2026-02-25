@@ -1,12 +1,13 @@
 # チームメンバー共通プロトコル
 
-オーケストレーターがTeamCreateで作成したチームに参加するメンバー向けの共通ルール。
+Phase ManagerがTeamCreateで作成したチームに参加するメンバー向けの共通ルール。
 spawn時にこのファイルの内容がプロンプトに注入される。
 
 ## コミュニケーション
 
 ### メッセージ送信（SendMessage）
-- **オーケストレーターへの報告**: `SendMessage(type: "message", recipient: "orchestrator", content: "...", summary: "...")`
+- **チームリーダー（Phase Manager）への報告**: `SendMessage(type: "message", recipient: "{leader-name}", content: "...", summary: "...")`
+  - leader-nameはチームconfig `~/.claude/teams/{team_name}/config.json` を読み、リーダーの名前を確認して使用する（TeamCreateにより自動生成される）
 - **チームメイトへの連絡**: `SendMessage(type: "message", recipient: "{teammate-name}", content: "...", summary: "...")`
 - メッセージは自動配信される（ポーリング不要）
 - 作業完了・ブロック発生・重要な発見時に必ず報告
@@ -50,12 +51,13 @@ shutdown承認前に以下を必ず報告:
 
 ### MCP優先原則
 利用可能なMCPツールを常に標準ツールより優先する。
-MCP失敗時のみ標準ツール使用可（理由明記）。
+ただしサブエージェント環境ではMCPが利用不可の場合がある（既知のバグ）。
+利用不可の場合は標準ツールにフォールバックすること。
 
 ## 共有概念
 
-| 概念 | 用途 | 報告方法 |
-|------|------|---------|
-| `arc` | ナレッジ追跡。`arc.saved`=保存した資料パス、`arc.used`=参照した資料パス | テキストで報告 |
-| `ncr` | 新機能リクエスト。type=skill/role/group、name、reason | テキストで報告 |
-| `decisions` | 意思決定。id、summary、rationale、alternatives | テキストで報告 |
+| 概念        | 用途                                                                    | 報告方法       |
+| ----------- | ----------------------------------------------------------------------- | -------------- |
+| `arc`       | ナレッジ追跡。`arc.saved`=保存した資料パス、`arc.used`=参照した資料パス | テキストで報告 |
+| `ncr`       | 新機能リクエスト。type=skill/role/group、name、reason                   | テキストで報告 |
+| `decisions` | 意思決定。id、summary、rationale、alternatives                          | テキストで報告 |

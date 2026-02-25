@@ -1,79 +1,43 @@
-# 資料館（Archives）システム
+# 資料館（Archives）システム仕様書
 
 ## 概要
+チームの調査・設計・決定事項を永続化し、将来の活用を担保する仕組み。
 
-各チームメンバーの調査結果・設計ドキュメント・決定事項を永続化し、将来のコアチームでも活用できるようにする仕組み。
+## ナレッジマネージャー (Librarian)
+- **役割**: 資料の検索・インデックス管理を行う独立エージェント。
+- **特性**: 全ロールにサービスを提供。
+- **呼出例**: `Task(subagent_type="general-purpose", model="haiku", prompt="$(cat roles/librarian.md)\n\n[検索クエリ]")`
 
-## ナレッジマネージャー(Librarian)
+## ディレクトリ構造 (${MEMORY_DIR}/archives/)
+- `index.json`: メインインデックス（自動更新）
+- `synonyms.json`: 同義語辞書（自動蓄積）
+- `research/`: 調査レポート
+- `design/`: 設計ドキュメント
+- `decisions/`: 意思決定記録 (ADR)
+- `patterns/`: 発見したパターン
+- `reviews/`: レビュー結果
+- `docs/`: 文書成果物
+- `ops/`: 運用手順
+- `audit/`: 監査レポート
+- `deprecated/`: 旧資料・統合済み
 
-資料館には**ナレッジマネージャー(Librarian)**が常駐し、資料の検索・インデックス管理を担当。
-**コアチームに属さない独立した存在**であり、全てのロールにサービスを提供する。
+## 命名・出力規則 (CRITICAL)
+**原則: 既存ファイルの上書き・編集は一切禁止。常に新規ファイルで出力すること。**
 
-呼び出し: `Task(subagent_type="general-purpose", model="haiku", prompt="$(cat roles/librarian.md)\n\nJWTに関する過去の調査はありますか？")`
+- **形式**: `{トピック}-{YYMMDD}-{HHMMSS}.md`
+- **例**: `research/jwt-auth-260128-143052.md`
+- **保存先ルール**:
+  - Researcher -> `research/`
+  - Architect -> `design/`
+  - Engineer -> `patterns/`
+  - QA Reviewer -> `reviews/`
+  - Tech Writer -> `docs/`
+  - DevOps -> `ops/`
+  - Auditor -> `audit/`
+- **判断基準**: 「迷ったら出力」。新規知見がない参照のみの場合を除き、全成果物を保存。
 
-詳細: roles/librarian.md
-
-## ディレクトリ構造
-
-```yaml
-directory: "${MEMORY_DIR}/"
-structure:
-  archives/:
-    index.json: メインインデックス（ナレッジマネージャーが毎回自動更新）
-    synonyms.json: 同義語辞書（ナレッジマネージャーが自動蓄積）
-    research/: 調査レポート
-    design/: 設計ドキュメント
-    decisions/: 意思決定記録（ADR）
-    patterns/: 発見したパターン
-    reviews/: レビュー結果
-    docs/: 文書担当の成果物
-    ops/: 運用手順
-    audit/: 監査レポート
-    deprecated/: 統合済み・古い資料
-```
-
-## 命名規則
-
-**CRITICAL: 常に新規ファイルとして出力。既存ファイルへの上書きは禁止。**
-
-```
-{トピック}-{YYMMDD}-{HHMMSS}.md
-例: research/jwt-authentication-260128-143052.md
-```
-
-| ルール | 説明 |
-|-------|------|
-| 常に新規作成 | 同じトピックでも新規ファイルとして出力 |
-| タイムスタンプ必須 | HHMMSS（時分秒）を含めてユニーク性を保証 |
-| 上書き禁止 | 既存ファイルを編集・上書きしない |
-| 整理はナレッジマネージャー | ファイルの整理・統合はナレッジマネージャーが担当 |
-
-## 全チームメンバーのナレッジ出力ルール（CRITICAL）
-
-**チームメンバーは常に新規ファイルとして出力する。既存ファイルの上書き・編集は禁止。**
-
-| チームメンバー | 保存先カテゴリ |
-|---------------|-------------|
-| 調査担当(Researcher) | archives/research/ |
-| 設計担当(Architect) | archives/design/ |
-| 実装担当(Engineer) | archives/patterns/ |
-| QA担当(QA Reviewer) | archives/reviews/ |
-| 文書担当(Tech Writer) | archives/docs/ |
-| 運用担当(DevOps) | archives/ops/ |
-| 監査担当(Auditor) | archives/audit/ |
-
-**出力判断: 「迷ったら出力する」が原則。**
-
-出力しなくてよいケース: 既存資料を参照しただけで新しい知見がない場合のみ。
-
-## オーケストレーターの役割
-
-1. **タスク開始時**: ナレッジマネージャーに問い合わせて関連資料を検索
-2. **チームメンバーへの依頼時**: 関連資料を `ref` で共有
-3. **タスク完了後**: ナレッジマネージャーに整理を依頼
-
-## 資料館の保守
-
-- EMが定期的に資料館をレビュー（古い情報の更新、重複統合）
-- 資料館は `.local/` 内にあり、通常gitignoreされる
-- 重要な資料はプロジェクトのドキュメントに昇格させる
+## 運用フロー
+1. **開始時**: Phase ManagerがLibrarianへ関連資料を照会。
+2. **依頼時**: 関連資料を `ref` でメンバーに共有。
+3. **完了後**: Librarianに情報の整理・インデックス更新を依頼。
+4. **保守**: EMによる定期レビュー、重要資料のプロジェクトドキュメントへの昇格。

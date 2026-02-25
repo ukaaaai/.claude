@@ -1,370 +1,426 @@
 # プロンプトテンプレート集
 
-オーケストレーターがロールの起動・依頼時に使用するテンプレート。
-ロールは以下の2方式で起動する:
-- **one-shot Task**: 軽量なロール（scout, strategist等）は Task tool で起動し結果を返す
-- **team member**: コアロール（researcher, architect, engineer, qa-reviewer等）は TeamCreate でチーム化し、メッセージベースで協調
+PM（メインセッション）がTeamCreateでPhase Managerをteam memberとしてspawnし、Phase Managerが自律的にサブロールを管理するためのテンプレート。
 
-## one-shot ロール起動テンプレート
+**CRITICAL: プロンプト圧縮原則**
+サブエージェントでは複雑なプロンプトによりMCPツールが利用不可になるバグがある（[#13605](https://github.com/anthropics/claude-code/issues/13605), [#14496](https://github.com/anthropics/claude-code/issues/14496)）。
+そのため、ロール定義はインライン展開せず「ファイルパスを渡して読ませる」方式を使用する。
 
-Task tool で起動するロールの共通テンプレート。
+## Phase Manager起動テンプレート（PM専用）
 
-### 起動方法
+PMはTeamCreateでチームを作成し、Phase Managerをteam memberとしてspawnする。Phase Managerは自律的にフェーズを完遂し、サマリーをSendMessageでPMに送信する。
+
+### Phase A EM（偵察・戦略: Steps 0-1）
+
+```
+# Step 1: チーム作成
+TeamCreate(team_name="orch-phase-a")
+
+# Step 2: Phase Manager spawn
+Task(
+  subagent_type="general-purpose",
+  team_name="orch-phase-a",
+  name="phase-a-em",
+  description="Phase A EM: 偵察・戦略",
+  prompt="あなたはPhase A EM（偵察・戦略）です。
+
+## 最初にやること
+1. `~/.claude/skills/orchestrator/roles/phase-em.md` を読み、ロール定義に従う
+2. `~/.claude/teams/orch-phase-a/config.json` を読み、PM（リーダー）の名前を確認
+
+## チーム情報
+- チーム名: orch-phase-a
+- あなたの名前: phase-a-em
+
+## 担当: Phase A（偵察・戦略）Steps 0-1
+- Step 0: librarian→scout×N（並列）→結果統合
+- Step 1: strategist×N（並列）→グループ分割決定
+- ロール定義は `~/.claude/skills/orchestrator/roles/` から読む
+
+## 完了時
+1. `{task_memory}/phase-a-summary.md` にフル結果書き込み
+2. `{task_memory}/60_decisions.md` に意思決定追記
+3. サマリーをSendMessageでPMに送信
+4. shutdown_requestまたはRedo指示を待機
+
+## タスク
+{ユーザーからのタスク全文}
+
+## メモリディレクトリ
+{task_memory}
+
+## MCP
+{MCP一覧。なければ「なし」。MCPが利用不可の場合は標準ツールにフォールバック}
+
+## 過去資料
+{ナレッジマネージャー結果。初回なら「なし」}"
+)
+
+# Step 3: PMはPhase Managerからのサマリーメッセージを待つ（自動配信）
+# Go判断後:
+SendMessage(type="shutdown_request", recipient="phase-a-em", content="Phase A complete")
+# Phase Managerのshutdown_response（approve）を待つ → 承認後にTeamDelete
+TeamDelete()
+# Redo判断の場合:
+SendMessage(type="message", recipient="phase-a-em", content="Redo: {フィードバック}", summary="Phase A Redo")
+```
+
+### Phase B EM（調査・設計: Steps 2-5）
+
+```
+# Step 1: チーム作成
+TeamCreate(team_name="orch-phase-b")
+
+# Step 2: Phase Manager spawn
+Task(
+  subagent_type="general-purpose",
+  team_name="orch-phase-b",
+  name="phase-b-em",
+  description="Phase B EM: 調査・設計",
+  prompt="あなたはPhase B EM（調査・設計）です。
+
+## 最初にやること
+1. `~/.claude/skills/orchestrator/roles/phase-em.md` を読み、ロール定義に従う
+2. `~/.claude/teams/orch-phase-b/config.json` を読み、PM（リーダー）の名前を確認
+
+## チーム情報
+- チーム名: orch-phase-b
+- あなたの名前: phase-b-em
+
+## 担当: Phase B（調査・設計）Steps 2-5
+- Steps 2-4: TeamCreate(サブチーム)→researcher+architect→協調実行→結果収集→TeamDelete
+- Step 5: Pre-Assessor（one-shot）で事前評価
+- ロール定義は `~/.claude/skills/orchestrator/roles/` から読む
+
+## 完了時
+1. `{task_memory}/phase-b-summary.md` にフル結果書き込み
+2. `{task_memory}/60_decisions.md` に意思決定追記
+3. サマリーをSendMessageでPMに送信
+4. shutdown_requestまたはRedo指示を待機
+
+## タスク
+{ユーザーからのタスク全文}
+
+## メモリディレクトリ
+{task_memory}
+
+## 前フェーズ
+Phase A サマリー: {task_memory}/phase-a-summary.md（読んで偵察結果を把握）
+
+## MCP
+{MCP一覧。なければ「なし」。MCPが利用不可の場合は標準ツールにフォールバック}"
+)
+
+# Step 3: PMはPhase Managerからのサマリーメッセージを待つ（自動配信）
+# Go判断後:
+SendMessage(type="shutdown_request", recipient="phase-b-em", content="Phase B complete")
+# Phase Managerのshutdown_response（approve）を待つ → 承認後にTeamDelete
+TeamDelete()
+# Redo判断の場合:
+SendMessage(type="message", recipient="phase-b-em", content="Redo: {フィードバック}", summary="Phase B Redo")
+```
+
+### Phase C EM（実装・QA: Steps 6-7）
+
+```
+# Step 1: チーム作成
+TeamCreate(team_name="orch-phase-c")
+
+# Step 2: Phase Manager spawn
+Task(
+  subagent_type="general-purpose",
+  team_name="orch-phase-c",
+  name="phase-c-em",
+  description="Phase C EM: 実装・QA",
+  prompt="あなたはPhase C EM（実装・QA）です。
+
+## 最初にやること
+1. `~/.claude/skills/orchestrator/roles/phase-em.md` を読み、ロール定義に従う
+2. `~/.claude/teams/orch-phase-c/config.json` を読み、PM（リーダー）の名前を確認
+
+## チーム情報
+- チーム名: orch-phase-c
+- あなたの名前: phase-c-em
+
+## 担当: Phase C（実装・QA）Steps 6-7
+- TeamCreate(サブチーム)→engineer+qa-reviewer(+tech-writer,devops)→実装・QA反復→品質チェック→結果収集→TeamDelete
+- ロール定義は `~/.claude/skills/orchestrator/roles/` から読む
+
+## 完了時
+1. `{task_memory}/phase-c-summary.md` にフル結果書き込み
+2. `{task_memory}/60_decisions.md` に意思決定追記
+3. サマリーをSendMessageでPMに送信
+4. shutdown_requestまたはRedo指示を待機
+
+## タスク
+{ユーザーからのタスク全文}
+
+## メモリディレクトリ
+{task_memory}
+
+## 前フェーズ
+Phase A サマリー: {task_memory}/phase-a-summary.md
+Phase B サマリー: {task_memory}/phase-b-summary.md
+（読んで調査結果と設計方針を把握）
+
+## MCP
+{MCP一覧。なければ「なし」。MCPが利用不可の場合は標準ツールにフォールバック}"
+)
+
+# Step 3: PMはPhase Managerからのサマリーメッセージを待つ（自動配信）
+# Go判断後:
+SendMessage(type="shutdown_request", recipient="phase-c-em", content="Phase C complete")
+# Phase Managerのshutdown_response（approve）を待つ → 承認後にTeamDelete
+TeamDelete()
+# Redo判断の場合:
+SendMessage(type="message", recipient="phase-c-em", content="Redo: {フィードバック}", summary="Phase C Redo")
+```
+
+---
+
+## Redo フィードバックテンプレート（PM専用）
+
+Phase Managerのredoが必要な場合、PMがSendMessageで使用するテンプレート。
+
+```
+# 同一チーム内のPhase ManagerにRedo指示を送信
+SendMessage(
+  type="message",
+  recipient="{phase-em-name}",
+  content="## Redo指示: Phase {X}
+
+### 前回のサマリーファイル
+{task_memory}/phase-{x}-summary.md（このファイルを読み、前回の結果を把握してください）
+
+### 問題点
+- {具体的な問題1}
+- {具体的な問題2}
+
+### 修正方針
+- {全再実行 / 部分再実行（対象ステップ: ...）}
+
+### PMからのフィードバック
+{具体的な指示・方向性}",
+  summary="Phase {X} Redo指示"
+)
+```
+
+---
+
+## PM直接実行テンプレート（Steps 9-12）
+
+### 進化（Steps 9-10、条件付き）
+
+```
+# ncr処理（ncrがある場合）
+Task(
+  subagent_type="general-purpose",
+  model="inherit",
+  description="NCR評価",
+  prompt="あなたはEng-Managerです。
+`~/.claude/skills/orchestrator/roles/eng-manager.md` を読み、ロール定義に従ってください。
+
+以下のncrを評価してください:
+{ncr一覧}"
+)
+
+# 構造レビュー（5ロール以上関与/新グループ設置時）
+Task(
+  subagent_type="general-purpose",
+  model="inherit",
+  description="構造レビュー",
+  prompt="あなたはEng-Managerです。
+`~/.claude/skills/orchestrator/roles/eng-manager.md` を読み、ロール定義に従ってください。
+
+以下のタスクで使用されたチーム構造をレビューしてください:
+{チーム構造の概要}"
+)
+```
+
+### 監査（Step 11、条件付き）
 
 ```
 Task(
   subagent_type="general-purpose",
-  model="{model}",  # 起動設定マトリクスのmodel列を参照
-  prompt="以下のロール定義に従って行動してください。\n\n{roles/{role}.mdの内容}\n\n---\n\n{タスク固有の指示}"
+  model="inherit",
+  description="独立監査",
+  prompt="あなたは監査担当(Auditor)です。
+`~/.claude/skills/orchestrator/roles/auditor.md` を読み、ロール定義に従ってください。
+
+以下のタスクを監査してください。
+
+## タスク概要
+{ユーザーのタスク}
+
+## フェーズサマリー
+Phase A: {task_memory}/phase-a-summary.md
+Phase B: {task_memory}/phase-b-summary.md
+Phase C: {task_memory}/phase-c-summary.md
+
+## 意思決定ログ
+{task_memory}/60_decisions.md
+
+上記ファイルを読み、監査レポートを作成してください。"
 )
 ```
 
-### 対象ロール
+### 自己改善（Step 12、条件付き）
 
-- scout（スカウト）
-- strategist（ストラテジスト）
-- evaluator（エバリュエーター）
-- librarian（ナレッジマネージャー）
-- pre-assessor（事前評価担当）
-- eng-manager（エンジニアリングマネージャー）
-- auditor（監査担当）
+```
+# 定義ファイル更新
+Task(
+  subagent_type="general-purpose",
+  model="sonnet",
+  description="定義ファイル更新",
+  prompt="あなたはEngineerです。
+`~/.claude/skills/orchestrator/roles/engineer.md` を読み、ロール定義に従ってください。
+
+監査担当からの自己改善勧告に基づき、定義ファイルを更新してください。
+
+## 勧告内容
+{definition勧告}
+
+## 更新対象
+{対象ファイルパス}"
+)
+
+# 更新レビュー
+Task(
+  subagent_type="general-purpose",
+  model="inherit",
+  description="定義更新レビュー",
+  prompt="あなたはQA Reviewerです。
+`~/.claude/skills/orchestrator/roles/qa-reviewer.md` を読み、ロール定義に従ってください。
+
+自己改善による定義ファイル更新をレビューしてください。
+
+## 更新内容
+{変更差分}"
+)
+```
 
 ---
 
-## team member 起動テンプレート
+## Phase Manager内部で使用するテンプレート
 
-TeamCreate でチームを作成し、メンバーをspawnするテンプレート。
+Phase Managerが自律的に使用する。PMは関与しない。
 
-### チーム作成
-
-```
-TeamCreate(team_name="orch-{task_id}-{phase}")
-# phaseは investigate / implement / review 等
-```
-
-### メンバーspawn
+### サブロール起動（one-shot）
 
 ```
 Task(
   subagent_type="general-purpose",
   model="{model}",
-  team_name="orch-{task_id}-{phase}",
-  name="{role_name}",
-  prompt="以下のロール定義に従って行動してください。\n\n{roles/{role}.mdの内容}\n\n---\n\n以下のチームプロトコルに従ってください。\n\n{roles/_team-protocol.mdの内容}\n\n---\n\n{タスク固有の指示}"
+  prompt="あなたは{ロール名}です。
+`~/.claude/skills/orchestrator/roles/{role}.md` を読み、ロール定義に従ってください。
+
+---
+
+{タスク固有の指示}
+
+## MCP
+{MCP一覧。なければ「なし」。MCPが利用不可の場合は標準ツールにフォールバック}"
 )
 ```
 
-### タスク割当
+### サブロール起動（team member / サブチーム）
 
 ```
-TaskCreate(subject="...", description="...", activeForm="...")
-TaskUpdate(taskId="...", owner="{role_name}")
-```
-
-### メッセージ送信
-
-```
-SendMessage(type="message", recipient="{role_name}", content="...", summary="...")
-```
-
-### シャットダウン
-
-```
-SendMessage(type="shutdown_request", recipient="{role_name}", content="タスク完了、シャットダウンを依頼")
-```
-
-### チーム削除
-
-```
-TeamDelete()
-```
-
-### 対象ロール
-
-- researcher（調査担当）
-- architect（設計担当）
-- engineer（実装担当）
-- qa-reviewer（QA担当）
-- tech-writer（文書担当）
-- devops（運用担当）
+# Phase B EMの場合:
+TeamCreate(team_name="orch-phase-b-investigate")
+Task(
+  subagent_type="general-purpose",
+  model="{model}",
+  team_name="orch-phase-b-investigate",
+  name="{role_name}",
+  prompt="あなたは{ロール名}です。
+以下のファイルを読み、ロール定義とチームプロトコルに従ってください:
+1. `~/.claude/skills/orchestrator/roles/{role}.md`
+2. `~/.claude/skills/orchestrator/roles/_team-protocol.md`
 
 ---
 
-## スカウトテンプレート（one-shot）
+{タスク固有の指示}
+
+## MCP
+{MCP一覧。なければ「なし」。MCPが利用不可の場合は標準ツールにフォールバック}"
+)
+
+# Phase C EMの場合:
+TeamCreate(team_name="orch-phase-c-implement")
+Task(
+  subagent_type="general-purpose",
+  model="{model}",
+  team_name="orch-phase-c-implement",
+  name="{role_name}",
+  prompt="..."  # 同様の構造
+)
+```
+
+### MCP情報テンプレート
+
+チームメンバーへの依頼時に含める:
 
 ```
-## タスク
-{ユーザーからのタスク全文}
-
-## あなたの調査観点: {focus}
-
-### focus = codebase（コードベース偵察）の場合:
-- 関連するファイル・ディレクトリを特定
-- 既存の設計パターン・命名規則を把握
-- 変更の影響範囲を概算
-
-### focus = technology（技術調査偵察）の場合:
-- ベストプラクティスを調査
-- 関連ライブラリ・フレームワークのドキュメントを確認
-- 技術的な選択肢を洗い出し
-
-### focus = requirements（要件・制約偵察）の場合:
-- タスク要件を分解・整理
-- 技術的制約を特定
-- 過去の関連資料を確認: {ref}
-
-## 利用可能なMCPツール
+## MCP（利用可能な場合は標準ツールより優先）
 {利用可能なMCPツール一覧。なければ「なし」}
 
-## 過去の関連資料
-{ナレッジマネージャー(Librarian)から取得した関連資料パス。なければ「なし」}
+| MCP      | 主要機能                                         | 用途                               | 代替標準ツール      |
+| -------- | ------------------------------------------------ | ---------------------------------- | ------------------- |
+| serena   | find_definition, find_references, get_hover_info | シンボル定義ジャンプ、参照箇所特定 | Grep, Glob          |
+| context7 | resolve-library-id, get-library-docs             | ライブラリ公式ドキュメント取得     | WebSearch, WebFetch |
+| devin    | (タスク実行)                                     | 外部リサーチ                       | WebSearch           |
 
-## 出力
-JSON形式で報告してください:
-{
-  "findings": [{"topic": "...", "detail": "...", "relevance": "high|medium|low", "source": "..."}],
-  "key_files": ["関連ファイルパス"],
-  "risks": ["注意すべき点"]
-}
+MCPが利用可能な場合は優先して使用する。
+**ただし、サブエージェント環境ではMCPが利用不可になる場合がある（既知のバグ）。**
+MCPが利用不可の場合は標準ツールにフォールバックすること（理由明記不要）。
 ```
 
----
-
-## ストラテジー会議テンプレート（one-shot）
-
-```
-## タスク
-{ユーザーからのタスク全文}
-
-## スカウトからの初期調査結果
-{Step 0でスカウトが収集した調査結果のサマリー}
-
-## 資料館からの関連資料
-{ナレッジマネージャー(Librarian)から取得した関連資料パスとサマリー。なければ「なし」}
-
-## あなたの役割
-このタスクを適切な粒度の「グループ」に分割する提案を行ってください。
-あなたはストラテジー会議のメンバー（{N}/5）です。
-
-## 検討観点
-1. **ドメイン分割**: タスクに含まれる独立したドメインを特定してください
-2. **粒度の適切さ**: 1つのグループに複数の異なるドメインが混在していないか
-3. **グループ間の依存関係**: 分割したグループの間にどのような依存があるか
-4. **ロールの配置案**: 各グループにどのロールを配置すべきか
-
-## 出力形式
-以下のYAML形式で提案してください:
-
-```yaml
-proposal:
-  groups:
-    - name: "{グループ名}"
-      domain: "{担当ドメイン}"
-      reason: "{設置理由}"
-      roles: [{必要なロールのリスト}]
-  dependencies:
-    - from: "{グループ名}"
-      to: "{グループ名}"
-      type: "{依存の種類}"
-  rationale: "{全体の分割理由}"
-```
-
-**IMPORTANT**: 1つのグループに2つ以上の独立したドメインを混在させないでください。
-ドメインが1つしかない場合は、グループを1つだけ提案しても構いません。
-```
-
----
-
-## team member タスク依頼テンプレート
-
-チームメンバーへのタスク割当時に使用（SendMessage経由）。
-ロール定義はspawn時に注入済みのため、タスク固有の情報のみを含める。
-
-```
-## グループ: {グループ名}
-## あなたの専門ドメイン: {ドメイン説明}
-
-## 課題
-{タスク説明}
-
-## あなたへの依頼
-{具体的な作業内容}
-
-## 利用可能なMCPツール（IMPORTANT）
-{利用可能なMCPツール一覧。なければ「なし」}
-
-**MCPツールがある場合、対応するビルトインツールの使用は原則禁止。**
-MCPツールが失敗/サポート外の場合のみ、理由を明記してビルトインを使用可。
-
-## 過去の関連資料（ref）
-{ナレッジマネージャー(Librarian)から取得した関連資料パス。なければ「なし」}
-
-## 事前評価担当(Pre-Assessor)からの助言
-{事前評価担当(Pre-Assessor)のコメント}
-
-## 他チームメンバーとの連携
-{同じチーム内の他メンバーとの連携情報。チーム内のメンバー名を列挙}
-- 同じチーム内のメンバーには直接SendMessageで共有してください
-- 別チームへの引き継ぎはオーケストレーターが行います（直接SendMessageしない）
-
-## ナレッジ出力（必須）
-作業で得た知見・成果を **新規ファイルとして** 資料館に保存してください。
-- パス: `${MEMORY_DIR}/archives/{カテゴリ}/{トピック}-{YYMMDD}-{HHMMSS}.md`
-- **既存ファイルの上書き禁止**
-- レスポンスの `arc.saved` に保存先パスを含めてください
-
-## 意思決定の報告（必須）
-あなたが下した重要な意思決定をレスポンスに含めてください:
-```json
-"decisions": [
-  {
-    "id": "D00X",
-    "summary": "決定の概要",
-    "detail": "具体的な決定内容",
-    "rationale": "なぜその決定をしたか",
-    "alternatives": ["検討した他の選択肢"]
-  }
-]
-```
-オーケストレーターがこれを60_decisions.mdに記録し、指示者質問フェーズで検証します。
-
-専門家として作業を進め、結果を報告してください。
-```
-
----
-
-## 調査担当(Researcher)への3軸検索指示テンプレート
-
-調査担当(Researcher)への依頼時に以下を必ず含める:
+### 3軸検索指示テンプレート（Researcher向け）
 
 ```
 ## 調査方法（必須）
 以下の3軸で調査してください:
 1. **問題軸**: 「{問題の説明}」で検索
 2. **機能軸**: 「{欲しい機能}」で検索
-3. **カタログ軸**: {フレームワーク}の公式Widget/APIカタログを網羅的に確認し、
-   解決に使える公式Widget/APIがないか調べてください
-
-**IMPORTANT**: カスタム実装を提案する前に、必ず公式Widget/APIで解決できないか確認してください。
+3. **カタログ軸**: {フレームワーク}の公式Widget/APIカタログを網羅的に確認
 
 ## 影響範囲分析（共通コンポーネント変更時は必須）
-変更対象が複数箇所で使用されている共通コンポーネントの場合:
+変更対象が複数箇所で使用されている場合:
 - **全使用箇所の一覧**を報告してください
-- 各使用箇所の用途を記載
 ```
 
----
-
-## 事前評価担当(Pre-Assessor)への事前評価依頼テンプレート
+### 事前評価依頼テンプレート（Pre-Assessor向け）
 
 ```
 ## コスト評価依頼
 - 新規コード行数: {行数}
 - 新規クラス/enum数: {数}
-- 低レベルAPI使用: {あり/なし（具体名）}
+- 低レベルAPI使用: {あり/なし}
 - 新規ユーティリティ: {あり/なし}
-- **共通コンポーネント変更: {あり/なし}**
-- **QA対象箇所数: {箇所数}**
-- **QA検証コスト: high/medium/low**
+- 共通コンポーネント変更: {あり/なし}
+- QA対象箇所数: {箇所数}
 ```
 
----
-
-## QA担当(QA Reviewer)へのレビュー依頼テンプレート
+### QAレビュー依頼テンプレート（QA Reviewer向け）
 
 ```
 ## レビュー基準（必須確認）
-以下の観点で必ずレビューしてください:
 1. **簡潔性**: もっとシンプルに書ける方法はないか
 2. **公式API活用**: フレームワークの公式Widget/APIで代替できないか
 3. **コード量**: 要件に対してコードが多すぎないか
-4. **低レベルAPI**: 高レベルAPIで解決可能ではないか
-5. **リグレッション防止**: バグ修正の場合、修正対象ロジックのテストが追加されているか
-
-特に「公式APIの見落とし」は最優先で指摘してください。
+4. **リグレッション防止**: バグ修正の場合、テストが追加されているか
 ```
 
----
-
-## MCP情報テンプレート
-
-チームメンバーへの依頼時に必ず含める:
-
-```
-## 利用可能なMCPツール（CRITICAL: 標準ツールより常に優先）
-{利用可能なMCPツール一覧を記載。なければ「なし」}
-
-| MCP | 主要機能 | 用途 | 禁止される標準ツール |
-|-----|---------|------|-------------------|
-| serena | find_definition, find_references, get_hover_info | シンボル定義ジャンプ、参照箇所特定、型情報取得 | Grep, Glob |
-| context7 | resolve-library-id, get-library-docs | ライブラリ公式ドキュメント取得 | WebSearch, WebFetch |
-| devin | (タスク実行) | 外部リサーチ・複雑なタスク | WebSearch |
-
-**MCPは標準ツールより高精度。** 例: serenaはLSPベースでシンボルを正確に解決するため、
-Grepによるテキストパターン検索より誤検出が少なく効率的。
-MCPが利用可能な場合、対応する標準ツールの使用は禁止。MCP失敗時のみ標準ツール使用可（理由明記）。
-```
-
-MCPが検出されなかった場合:
-```
-## 利用可能なMCPツール
-なし（標準ツールを使用してください）
-```
-
----
-
-## フェーズ間ハンドオフテンプレート
-
-TeamDelete前にオーケストレーターが全メンバーに確認するテンプレート。
+### フェーズ間ハンドオフテンプレート
 
 ```
 ## シャットダウン前の報告依頼
 
 TeamDeleteの前に、以下を報告してください:
-
-1. **decisions**: あなたが下した意思決定の一覧
-   - id, summary, rationale, alternatives を含めてください
+1. **decisions**: 意思決定の一覧（id, summary, rationale, alternatives）
 2. **arc.saved**: 資料館に保存したファイルパスの一覧
 3. **未解決事項**: 次フェーズに引き継ぐべき課題
 
 上記を報告後、shutdown_requestに応答してください。
-```
-
----
-
-## 自己改善テンプレート
-
-### 実装担当(Engineer)への定義更新依頼
-
-```
-## 課題
-監査担当(Auditor)からの自己改善勧告に基づき、定義ファイルを更新してください。
-
-## 勧告内容
-{監査担当(Auditor)からのdefinition勧告}
-
-## 更新対象
-{対象ファイルパスのリスト}
-
-## 更新方針
-- 勧告の根本原因を解決する
-- 既存の構造を尊重しつつ改善する
-- 禁止事項やチェック項目を追加する
-- 他のファイルとの整合性を保つ
-```
-
-### QA担当(QA Reviewer)への定義更新レビュー依頼
-
-```
-## 課題
-自己改善による定義ファイル更新のレビュー
-
-## 更新内容
-{実装担当(Engineer)が行った更新の差分}
-
-## レビュー観点
-- 勧告の根本原因が解決されているか
-- 他の定義との整合性が保たれているか
-- 副作用がないか
-- 過度に複雑になっていないか
 ```
