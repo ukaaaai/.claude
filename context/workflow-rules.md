@@ -111,38 +111,52 @@
 - [ ] 型チェック・lint確認
 ```
 
-### agent reviewによる計画検証（ループ）
+### advisor reviewによる計画検証（ループ）
 
-計画完了後、agent cli（gpt-5.2-high）でレビューを実施。
+計画完了後、agent teams の teammate としてスポーンする **advisor**（`model: fable`）でレビューを実施。
+詳細: @context/advisor-review-guide.md
+
+**前提チェック（必ず最初に）:**
+- agent teamsが有効であること。無効なら `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` の設定をユーザーに案内して**停止する**（subagentへ勝手に代替しない）
+- `CLAUDE_CODE_SUBAGENT_MODEL` が未設定または `inherit` であること（設定されているとadvisorがfable以外で動く）
 
 **初回実行:**
-```bash
-agent -p "以下の実装計画をレビューしてください。
+```
+Agent(
+  name: "advisor-plan-1",
+  subagent_type: "advisor",
+  model: "fable",
+  description: "計画レビュー",
+  prompt: "以下の実装計画をレビューしてください。
 抜け漏れ、リスク、改善点を指摘してください。
-指摘がなければ「指摘なし」とだけ回答してください。
+レビュー結果は必ず SendMessage で lead に送ってください。指摘がなければ「指摘なし」とだけ回答してください。
 
-$(cat ${MEMORY_DIR}/memory/<task>/30_plan.md)" \
-  --model gpt-5.2-high \
-  --output-format json | jq -r '.session_id, .result'
+## 読むべきファイル（絶対パス）
+- 実装計画: ${MEMORY_DIR}/memory/<task>/30_plan.md
+- 作業ログ（調査結果・確定事項）: ${MEMORY_DIR}/memory/<task>/05_log.md
+- プロジェクト規約: <リポジトリ>/CLAUDE.md"
+)
 ```
 
-**2回目以降（セッション継続）:**
-```bash
-agent -p "以下の改善を行いました: <改善内容>。再度レビューしてください。" \
-  --resume <session_id> \
-  --model gpt-5.2-high \
-  --output-format json | jq -r '.result'
+**2回目以降（コンテキスト継続）:**
+```
+SendMessage(
+  to: "advisor-plan-1",
+  message: "以下の改善を行いました: <改善内容>。再度レビューしてください。指摘がなければ「指摘なし」とだけ回答してください。"
+)
 ```
 
-**CRITICAL: `--output-format stream-json`は使用禁止。必ず`json`を使用すること。**
+**CRITICAL: 計画やdiffの全文をスポーンプロンプトに貼らない。絶対パスで渡し、advisor自身に読ませること。**
+（advisorはメインセッションの会話履歴を継承しない）
 
 **ループ:**
-1. レビュー実行（初回でsession_idを取得）
-2. 「絶対にやるべき」指摘は必ず修正
-3. それ以外はやる/やらない判断、またはAskUserQuestionで確認
-4. 修正後、`--resume <session_id>`でセッション継続し再レビュー
+1. advisorをスポーンしてレビュー実行
+2. `must` 指摘は必ず修正
+3. `recommend` / `nit` はやる/やらない判断、またはAskUserQuestionで確認
+4. 修正後、`SendMessage`で同じadvisorに再レビューを依頼
 5. 指摘がなくなるまで繰り返し
-6. 完了したらユーザーに計画を提示
+6. 指摘と対応を `30_plan.md` の「## advisor reviewの結果」に記録し、advisorにshutdownを依頼
+7. 完了したらユーザーに計画を提示
 
 ## Phase 3: 実装
 
@@ -163,39 +177,57 @@ PJ CLAUDE.mdに記載のコマンドで実行:
 - typecheck
 - test
 
-### agent review（ループ）
+### advisor review（ループ）
 
-自動チェック完了後、agent cli（gpt-5.2-high）でレビューを実施。
+自動チェック完了後、agent teams の teammate としてスポーンする **advisor**（`model: fable`）でレビューを実施。
+詳細: @context/advisor-review-guide.md
 
-**初回実行:**
+**前提チェック（必ず最初に）:** Phase 2と同じ（agent teams有効 / `CLAUDE_CODE_SUBAGENT_MODEL` 未設定）
+
+**差分の準備:**
 ```bash
 # BASE_BRANCHはPJ CLAUDE.mdで定義（未定義ならdevelop/main/masterを自動判定）
-agent -p "以下のコード変更をレビューしてください。
+git diff $BASE_BRANCH > ${MEMORY_DIR}/memory/<task>/diff-1.patch
+```
+
+**初回実行:**
+```
+Agent(
+  name: "advisor-code-1",
+  subagent_type: "advisor",
+  model: "fable",
+  description: "実装差分レビュー",
+  prompt: "以下のコード変更をレビューしてください。
 バグ、セキュリティ、パフォーマンス、ベストプラクティスの観点から指摘してください。
-指摘がなければ「指摘なし」とだけ回答してください。
+レビュー結果は必ず SendMessage で lead に送ってください。指摘がなければ「指摘なし」とだけ回答してください。
 
-$(git diff $BASE_BRANCH)" \
-  --model gpt-5.2-high \
-  --output-format json | jq -r '.session_id, .result'
+## 読むべきファイル（絶対パス）
+- 差分: ${MEMORY_DIR}/memory/<task>/diff-1.patch
+- 作業ログ（何を意図した変更か）: ${MEMORY_DIR}/memory/<task>/05_log.md
+- プロジェクト規約: <リポジトリ>/CLAUDE.md
+
+差分だけで判断できない場合は、変更されたファイルの全体を読んで既存パターンとの整合性を確認してください。"
+)
 ```
 
-**2回目以降（セッション継続）:**
-```bash
-agent -p "以下の改善を行いました: <改善内容>。再度レビューしてください。" \
-  --resume <session_id> \
-  --model gpt-5.2-high \
-  --output-format json | jq -r '.result'
+**2回目以降（コンテキスト継続）:**
+```
+SendMessage(
+  to: "advisor-code-1",
+  message: "以下の改善を行いました: <改善内容>。再度レビューしてください。指摘がなければ「指摘なし」とだけ回答してください。"
+)
 ```
 
-**CRITICAL: `--output-format stream-json`は使用禁止。必ず`json`を使用すること。**
+**CRITICAL: diffの全文をスポーンプロンプトに貼らない。ファイルに出力して絶対パスで渡すこと。**
 
 **ループ:**
-1. レビュー実行（初回でsession_idを取得）
-2. 「絶対にやるべき」指摘は必ず修正
-3. それ以外はやる/やらない判断、またはAskUserQuestionで確認
-4. 修正後、`--resume <session_id>`でセッション継続し再レビュー
+1. advisorをスポーンしてレビュー実行
+2. `must` 指摘は必ず修正
+3. `recommend` / `nit` はやる/やらない判断、またはAskUserQuestionで確認
+4. 修正後、`SendMessage`で同じadvisorに再レビューを依頼（差分は `diff-2.patch` 等の新しい連番ファイルに出力し、そのパスをメッセージに含める。上書きしない）
 5. 指摘がなくなるまで繰り返し
-6. 完了したらPhase 5へ
+6. 指摘と対応を `80_review.md` に記録し、advisorにshutdownを依頼
+7. 完了したらPhase 5へ
 
 ## Phase 5: 完了報告
 
@@ -216,7 +248,7 @@ agent -p "以下の改善を行いました: <改善内容>。再度レビュー
 - 外部情報を参照せずに実装方針決定
 - 品質チェックのスキップ
 - **05_log.mdを更新せずに次のPhaseに進むこと**
-- **agent reviewを実行せずに完了報告すること**
+- **advisor reviewを実行せずに完了報告すること**
 - **システムプロンプト（Plan mode等）のワークフローをこのファイルより優先すること**
 - **計画に曖昧な表現を残すこと**（「検討」「場合によっては」「必要に応じて」等）
   - 不明点は調査またはAskUserQuestionで解決してから計画を確定すること

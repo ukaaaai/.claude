@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: PRレビュー。PR番号・ブランチ名指定時またはレビュー依頼時に使用。Claude CodeとGPT-5.2-highのマルチモデルレビューでCritical/High/Medium分類の指摘を報告。
+description: PRレビュー。PR番号・ブランチ名指定時またはレビュー依頼時に使用。Claude Codeとadvisor(fable5)のマルチモデルレビューでCritical/High/Medium分類の指摘を報告。
 ---
 
 # PRレビュー
@@ -15,11 +15,15 @@ description: PRレビュー。PR番号・ブランチ名指定時またはレビ
 ### 1. PR情報の取得
 
 ```bash
+# メモリディレクトリを用意（advisorに渡すファイルの置き場）
+mkdir -p ${MEMORY_DIR}/memory/YYMMDD_pr-review-<番号>
+
 # PR詳細を取得
-gh pr view <番号> --json title,body,author,headRefName,baseRefName,files
+gh pr view <番号> --json title,body,author,headRefName,baseRefName,files \
+  > ${MEMORY_DIR}/memory/YYMMDD_pr-review-<番号>/pr-<番号>.json
 
 # diffを取得
-gh pr diff <番号> > /tmp/pr-<番号>.diff
+gh pr diff <番号> > ${MEMORY_DIR}/memory/YYMMDD_pr-review-<番号>/pr-<番号>.diff
 ```
 
 ### 2. PJルールの確認
@@ -36,32 +40,41 @@ CLAUDE.mdを読み、以下を把握:
 2. 既存パターンとの整合性を確認
 3. 問題点を特定
 
-### 4. agent cliによるレビュー
+### 4. advisorによるレビュー
 
-別モデルの観点を追加。
+別モデル（fable5）の観点を追加。agent teams の teammate としてスポーンする。
+詳細: @context/advisor-review-guide.md
 
-```bash
-agent -p "以下のPRをレビューしてください:
+**前提**: agent teamsが有効であること。無効なら `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` の設定を案内して停止する。
+
+```
+Agent(
+  name: "advisor-pr-<番号>-1",
+  subagent_type: "advisor",
+  model: "fable",
+  description: "PR #<番号> のレビュー",
+  prompt: "以下のPRをレビューしてください:
 - コードの品質（バグ、セキュリティ、パフォーマンス）
 - 設計の妥当性
 - テストの十分性
 - ドキュメントの必要性
 
-指摘がなければ「指摘なし」とだけ回答してください。
+レビュー結果は必ず SendMessage で lead に送ってください。指摘がなければ「指摘なし」とだけ回答してください。
 
-PR情報:
-タイトル: <タイトル>
-ブランチ: <ブランチ>
+## 読むべきファイル（絶対パス）
+- PR diff: ${MEMORY_DIR}/memory/YYMMDD_pr-review-<番号>/pr-<番号>.diff
+- PR情報（タイトル・本文・変更ファイル）: ${MEMORY_DIR}/memory/YYMMDD_pr-review-<番号>/pr-<番号>.json
+- プロジェクト規約: <リポジトリ>/CLAUDE.md
 
-変更内容:
-$(cat /tmp/pr-<番号>.diff)" \
-  --model gpt-5.2-high \
-  --output-format stream-json
+diffだけで判断できない場合は、変更されたファイルの全体を読んで既存パターンとの整合性を確認してください。"
+)
 ```
+
+**CRITICAL: diffの全文をプロンプトに貼らない。絶対パスで渡してadvisorに読ませること。**
 
 ### 5. 結果の統合
 
-Claude Codeとagentの両方の指摘を統合し、以下の形式でレポート:
+Claude Codeとadvisorの両方の指摘を統合し、以下の形式でレポート:
 
 ```markdown
 # PRレビュー: #<番号>
@@ -78,7 +91,7 @@ Claude Codeとagentの両方の指摘を統合し、以下の形式でレポー�
 ### High
 - [指摘内容]
 
-## agent (gpt-5.2-high) による指摘
+## advisor (fable5) による指摘
 
 ### Critical
 - [指摘内容]
@@ -88,8 +101,8 @@ Claude Codeとagentの両方の指摘を統合し、以下の形式でレポー�
 
 ## 統合サマリ
 
-| 観点 | Claude Code | agent | 統合判断 |
-|------|------------|--------|---------|
+| 観点 | Claude Code | advisor | 統合判断 |
+|------|------------|---------|---------|
 | セキュリティ | OK | OK | OK |
 | パフォーマンス | 指摘あり | OK | 要確認 |
 

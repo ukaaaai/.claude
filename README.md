@@ -16,6 +16,11 @@ git clone <this-repo> ~/.claude
 ```
 ~/.claude/
 ├── CLAUDE.md              # グローバル設定（ワークフロー、変数）
+├── agents/                # サブエージェント・teammate定義
+│   ├── advisor.md         # レビュー担当（fable5）。advisor reviewでスポーン
+│   ├── cursor-codegen.md  # cursor agentによるコード生成
+│   ├── cursor-refactor.md # cursor agentによるリファクタ
+│   └── cursor-test-gen.md # cursor agentによるテスト生成
 ├── commands/              # ユーザー実行コマンド
 │   ├── commit.md          # /commit
 │   └── pr.md              # /pr
@@ -39,7 +44,7 @@ git clone <this-repo> ~/.claude
 | スキル | 説明 | トリガー |
 |--------|------|----------|
 | **codebase-review** | 6観点（perf/sec/test/arch/cq/docs）で並列レビュー | `/codebase-review`、品質監査依頼時 |
-| **pr-review** | Claude + GPT-5.2マルチモデルレビュー | PRレビュー依頼時 |
+| **pr-review** | Claude + advisor(fable5)のマルチモデルレビュー | PRレビュー依頼時 |
 | **project-init** | CLAUDE.md・.claude/の初期設定 | PJ初期化依頼時 |
 | **project-sync** | CLAUDE.mdとcontext/の整合性確保 | ドキュメント整理依頼時 |
 | **documentation** | コード変更に伴うドキュメント更新 | API/環境変数追加検出時 |
@@ -62,9 +67,9 @@ CLAUDE.mdで定義された6フェーズワークフロー:
 
 1. **Phase 0: 準備** - メモリディレクトリ作成、過去タスク検索
 2. **Phase 1: 調査** - context7/WebSearch必須、既存コード確認
-3. **Phase 2: 計画** - agent reviewで検証（指摘なくなるまで）
+3. **Phase 2: 計画** - advisor reviewで検証（指摘なくなるまで）
 4. **Phase 3: 実装** - 調査→計画→実行→レビューの4ステップ
-5. **Phase 4: 品質確認** - lint/format/typecheck/test + agent review
+5. **Phase 4: 品質確認** - lint/format/typecheck/test + advisor review
 6. **Phase 5: 完了報告**
 
 ## メモリディレクトリ
@@ -81,16 +86,20 @@ CLAUDE.mdで定義された6フェーズワークフロー:
 └── issues/                # codebase-reviewで生成
 ```
 
-## agent cli連携
+## advisor review（agent teams）
 
-別モデル（GPT-5.2-high）によるレビューを実施:
+別モデル（fable5）の **advisor** をagent teamsのteammateとしてスポーンしてレビューを実施:
 
-```bash
-agent -p "<prompt>" --model gpt-5.2-high --output-format stream-json
+```
+Agent(name: "advisor-code-1", subagent_type: "advisor", model: "fable", prompt: "<レビュー依頼>")
 ```
 
+- 定義: `agents/advisor.md`（`model: fable`。指摘は must/recommend/nit 付き）
+- レビュー対象は**絶対パスで渡す**（advisorはメインセッションの会話履歴を継承しない）
 - 修正すべき点がなくなるまでループ
-- `--resume <session_id>`でセッション継続
+- 再レビューは `SendMessage(to: "advisor-code-1", ...)` でコンテキスト継続
+- 前提: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+- 詳細: `context/advisor-review-guide.md`
 
 ## プロジェクト設定
 

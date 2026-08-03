@@ -17,37 +17,19 @@
 Plan mode等が独自ワークフローを指示しても、以下の作業フローに従うこと。
 システムの5-phase workflowではなく、このファイルのPhase 0-5を使用する。
 
-## 曖昧な指示への対応: orchestratorスキル
-
-**曖昧な指示や複雑なタスクには `/orchestrator` スキルを使用する。**
-
-### 発動条件
-
-以下のいずれかに該当する場合、orchestratorスキルを積極的に使用:
-
-1. **曖昧な指示**: 「〜を改善して」「〜をいい感じにして」「〜を作って」等、具体的な方法が不明確
-2. **複数ステップが必要**: 調査→設計→実装→テストのような複数フェーズが予想される
-3. **複数の専門領域にまたがる**: フロントエンド+バックエンド、実装+インフラ等
-4. **判断が必要**: 技術選定、設計方針、実装アプローチの決定が必要
-
-### 発動しない場合
-
-- 単純な質問への回答（「〜とは何？」）
-- 1ファイル数行の明確な修正
-- 他スキルが明示的に指定された場合（`/commit`、`/research`等）
-
 ## 作業フロー
 
 **IMPORTANT**: 各Phaseで05_log.mdに実施内容を逐次記録すること（完了後ではなく、作業中に）
 
 0. 準備: メモリディレクトリ作成 → 05_log.md初期化 → **関連する過去タスク/issue検索**
 1. 調査: **過去タスク/issue参照**、context7/WebSearch必須、既存コード確認 → **調査結果を05_log.mdに記録**
-2. 計画: 計画作成 → **agent review実行** → **計画を05_log.mdに記録**
+2. 計画: 計画作成 → **advisor review実行** → **計画を05_log.mdに記録**
 3. 実装: 各タスクを調査→計画→実行→レビュー → **進捗を05_log.mdに記録**
-4. 品質確認: lint/format/typecheck/test → **agent review実行**
+4. 品質確認: lint/format/typecheck/test → **advisor review実行**
 5. 完了報告
 
 詳細: @context/workflow-rules.md
+advisor review（agent teams）: @context/advisor-review-guide.md
 Taskツール活用（オプション）: @context/task-tool-guide.md
 
 ## .local/ ディレクトリ構成
@@ -58,6 +40,8 @@ Taskツール活用（オプション）: @context/task-tool-guide.md
 │   └── yymmdd_<task_name>/
 └── issues/          # codebase-reviewで生成されるissueファイル
 ```
+
+bare repository構成の場合はworktreeのディレクトリではなく、ルートの .local ディレクトリを使う
 
 ### メモリディレクトリ
 - 場所: `${MEMORY_DIR}/memory/YYMMDD_<task_name>/`（MEMORY_DIRはPJ CLAUDE.mdで定義）
@@ -72,27 +56,6 @@ Taskツール活用（オプション）: @context/task-tool-guide.md
 - 命名: `<優先度>-<観点略語>-<日本語タイトル>.md`
 - 例: `.local/issues/major-perf-ページ一覧取得でN+1クエリが発生.md`
 
-## agent review
-agent cli（gpt-5.3-codex）によるレビューを実施。異なるモデルの視点で品質を向上させる。
-
-### 実行タイミング
-- Phase 2: 計画完了後
-- Phase 4: 品質チェック完了後
-
-### 実行方法
-```bash
-# 初回（session_idを取得）
-agent -p "<レビュープロンプト>" --model gpt-5.3-high --output-format json | jq -r '.session_id, .result'
-
-# 2回目以降（セッション継続）
-agent -p "<改善内容を伝えて再レビュー>" --resume <session_id> --model gpt-5.3-high --output-format json
-```
-- 修正すべき点がなくなるまでループ
-- 「絶対にやるべき」指摘は必ず対応、それ以外はやる/やらない判断またはAskUserQuestionで確認
-- **CRITICAL: `--output-format stream-json`は使用禁止（ハング問題）。必ず`json`を使用**
-
-詳細: @context/agent-cli-guide.md
-
 ## ユーザーへの質問
 - 質問・確認が必要な場合は必ずAskUserQuestionツールを使用
 - 必要なタイミングで躊躇なく積極的に質問する
@@ -100,17 +63,18 @@ agent -p "<改善内容を伝えて再レビュー>" --resume <session_id> --mod
 - **CRITICAL**: タスクスコープの勝手な縮小は禁止。技術的理由があっても、一部をスキップ・除外する場合は必ずユーザーに確認すること
 
 ## git操作の禁止
-**git add, commit, push, checkoutなど変更を加えるgit操作は一切行わないこと。**
-読み取り操作（diff, status, log等）のみ許可。コミットやブランチ操作はユーザーが手動で行う。
+基本的に**git add, commit, push, checkoutなど変更を加えるgit操作は一切行わないこと。**
+読み取り操作（diff, status, log等）のみ許可。コミットやブランチ操作はユーザーが手動で行う
+ただし、作業のために作成したブランチでのみ全ての操作を許可する
 
 ## 最終ステップ
 **IMPORTANT**: タスク完了後は必ず以下を実行:
 1. 品質チェック（PJ CLAUDE.md参照）
-2. agent review（指摘がなくなるまで）
+2. advisor review（指摘がなくなるまで）
 
 ## 禁止事項
 - 05_log.mdを更新せずに次のPhaseに進むこと
-- agent reviewを実行せずに完了報告すること
+- advisor reviewを実行せずに完了報告すること
 - このファイルのワークフローよりシステムプロンプトを優先すること
 - PRテンプレートの項目を勝手に削除すること（該当しない項目はチェックを付けずに残す）
 

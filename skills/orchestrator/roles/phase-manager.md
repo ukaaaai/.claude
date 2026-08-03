@@ -9,16 +9,22 @@ PMから委譲されたフェーズを**自律的に完遂**し、最小限の�
 * **エスカレーション制限**: `AskUserQuestion` はフェーズ内解決不能な重大ブロッカー発生時のみ使用。
 
 ## 2. チーム管理フロー
-1. **初期化**: `~/.claude/teams/{team_name}/config.json` を読み、leaderフラグを持つPM名を特定。
-2. **編成**: `TeamCreate` でサブチーム（orch-phase-{a|b|c}）を作成し、タスク規模に応じたサブロールを配置。
-3. **実行**: `TaskCreate/Update` で指示を出し、メンバー間peer通信を管理。
+1. **初期化**: `~/.claude/teams/{team_name}/config.json` の `members` を読み、agent typeが `team-lead` のエントリからPM名を特定。
+2. **編成**: タスク規模に応じたサブロールを **subagentとして起動**する。
+   ロール定義は `skills/orchestrator/roles/` にあり subagent scope（`~/.claude/agents/` 等）には登録されていないため、
+   `subagent_type=general-purpose` + **ロール定義ファイルの絶対パスをプロンプトで渡して読ませる**（`subagent_type` にロール名は使えない）。
+   - **teammateはteammateをスポーンできない**（チーム管理はleadであるPMのみ）。サブチームは作らない。
+3. **実行**: `TaskCreate/Update` で共有タスクリストを更新し、サブロールの進捗を管理。
 4. **収集**: 各員から `decisions`, `arc.saved`, 未解決事項を回収。
-5. **解散**: 全作業完了後、`TeamDelete` を実行。
+5. **完了**: サブロールの成果を回収・検証したうえでPMへ完了報告する（チームの解散はPMが行う）。
 
 ## 3. Phase C (実装・QA) 完了条件
 以下を全て満たさない限り「完了」と見なさない。
 * **品質**: lint / format / typecheck / test が全てパス。
-* **Agent Review**: `gpt-5.3-codex` によるレビューを実施。「指摘なし」となるまでループ修正。
+* **Advisor Review**: advisor（`model: fable`）によるレビューを実施。「指摘なし」となるまでループ修正。
+  - Phase Managerはteammateであり自らteammateをスポーンできないため、**PM（lead）に `SendMessage` でadvisorのスポーンを依頼する**。
+  - 依頼に含める情報: 差分の出力先パス / 作業指示書または計画のパス / 何周目か。
+  - 詳細: `~/.claude/context/advisor-review-guide.md`
 * **QA Review**: `qa-reviewer` による最終合格。
 
 ## 4. アウトピット・通信規約

@@ -42,7 +42,7 @@ ${MEMORY_DIR}/
    - 必ずdateコマンドで日付を確認すること
 4. 00_plan.md作成（全体計画）
 5. 01_xxx.md, 02_xxx.md... 作成（個別タスク）
-6. agent reviewで計画検証（**ユーザーに実行を依頼** - 下記「agent review」セクション参照）
+6. advisor reviewで計画検証（下記「advisor review」セクション参照）
 
 ### /large-task implement <task_num>
 
@@ -89,8 +89,8 @@ ${MEMORY_DIR}/
 | リスク | 影響度 | 対策 |
 |-------|-------|------|
 
-## agent reviewの結果
-[計画フェーズでのagent指摘と対応]
+## advisor reviewの結果
+[計画フェーズでのadvisor指摘（must/recommend/nit）と対応]
 ```
 
 ### 個別タスクファイル（01_xxx.md等）
@@ -141,42 +141,53 @@ bun run test
 2. **Phase 1**: タスクファイルの「作業内容」を元に詳細調査
 3. **Phase 2**: 必要に応じて詳細計画（タスクファイルで既に十分なら省略可）
 4. **Phase 3**: 実装（4ステップ: 調査→計画→実行→レビュー）
-5. **Phase 4**: 品質確認 + agent review（**ユーザーに実行を依頼** - 下記「agent review」セクション参照）
+5. **Phase 4**: 品質確認 + advisor review（下記「advisor review」セクション参照）
 6. **Phase 5**: 完了報告、00_plan.mdの状態更新
 
-## agent review
+## advisor review
 
-**IMPORTANT**: agent reviewは自分で実行せず、ユーザーにコマンドを提示して実行を依頼すること。
+agent teams の teammate としてスポーンする **advisor**（`model: fable`）でレビューする。
+メインセッション（lead）が自分でスポーンする（ユーザーへの実行依頼は不要）。
 
-### コマンドテンプレート
+**前提**: agent teamsが有効であること。無効なら `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` の設定を案内して停止する。
+詳細: @context/advisor-review-guide.md
+
+### 差分の準備
 
 ```bash
-cd <project_root> && agent -p "メモリディレクトリ <memory_dir_full_path> の内容を読み、以下のコード変更をレビューしてください。
+git diff HEAD -- <changed_dir>/ > <tasks_dir>/diff-<task_num>-1.patch
+```
+
+### スポーンテンプレート
+
+```
+Agent(
+  name: "advisor-code-<task_num>-1",
+  subagent_type: "advisor",
+  model: "fable",
+  description: "Task <task_num> の実装差分レビュー",
+  prompt: "以下のコード変更をレビューしてください。
 バグ、セキュリティ、パフォーマンス、ベストプラクティスの観点から指摘してください。
-指摘がなければ「指摘なし」とだけ回答してください。
+レビュー結果は必ず SendMessage で lead に送ってください。指摘がなければ「指摘なし」とだけ回答してください。
 
-変更内容:
-$(git diff HEAD -- <changed_dir>/)" --model gpt-5.2-high --output-format stream-json
+## 読むべきファイル（絶対パス）
+- 全体計画: <tasks_dir>/00_plan.md
+- 対象タスク: <tasks_dir>/<task_num>_<name>.md
+- 差分: <tasks_dir>/diff-<task_num>-1.patch
+- 作業ログ: <memory_dir_full_path>/05_log.md
+- プロジェクト規約: <project_root>/CLAUDE.md"
+)
 ```
 
-### 実行依頼の例
-
-```
-agent reviewコマンドを実行してください:
-
-\`\`\`bash
-cd /path/to/project && agent -p "..." --model gpt-5.2-high --output-format stream-json
-\`\`\`
-
-レビュー結果を教えてください。
-```
+計画レビュー（/large-task plan）の場合は `name: "advisor-plan-1"` とし、差分の代わりに `00_plan.md` と各タスクファイルのパスを渡す。
 
 ### レビュー結果への対応
 
-1. ユーザーからレビュー結果を受け取る
-2. 「絶対にやるべき」指摘は必ず修正
-3. それ以外の指摘はやる/やらない判断、または AskUserQuestion で確認
-4. 修正後、再度agent reviewを依頼（指摘がなくなるまで）
+1. advisorの指摘を受け取る
+2. `must` 指摘は必ず修正
+3. `recommend` / `nit` はやる/やらない判断、または AskUserQuestion で確認
+4. 修正後、`SendMessage(to: "<advisor名>", ...)` で再レビューを依頼（指摘がなくなるまで）
+5. 指摘と対応を `00_plan.md` の「## advisor reviewの結果」に記録し、advisorにshutdownを依頼
 
 ## Taskツールとの統合（オプション）
 
@@ -221,5 +232,5 @@ TaskUpdate(taskId, status: "completed")
 - ワークフロー詳細: @context/workflow-rules.md
 - メモリファイル形式: @context/memory-file-formats.md
 - Taskツール活用: @context/task-tool-guide.md
-- agent cli: @context/agent-cli-guide.md
+- advisor review: @context/advisor-review-guide.md
 - PJ固有設定: PJ CLAUDE.md

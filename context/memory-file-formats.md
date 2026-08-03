@@ -65,7 +65,7 @@
 ---
 ```
 
-**agent review呼び出し時**: このファイルのフルパスを明示し、agentに中身を読ませる
+**advisor review呼び出し時**: このファイルのフルパスを明示し、advisorに中身を読ませる（advisorはメインセッションの会話履歴を継承しない）
 
 ## 00_spec.md
 
@@ -118,8 +118,8 @@
 #### 4. レビュー
 - [ ] 確認項目
 
-## agent reviewの結果
-[agentからの指摘と対応]
+## advisor reviewの結果
+[advisorからの指摘（must/recommend/nit）と対応]
 
 ## リスク・懸念事項
 | リスク | 影響度 | 対策 |
