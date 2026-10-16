@@ -9,6 +9,9 @@ Claude Codeのuser-level設定ファイル集。プロジェクト横断で使�
 git clone <this-repo> ~/.claude
 
 # または既存の~/.claude/にマージ
+
+# token最適化ツールのrtkをインストール
+brew install rtk
 ```
 
 ## 構成
